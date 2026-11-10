@@ -1,5 +1,5 @@
 
-name: Build My Clipboard APK
+name: Build Schowek APK
 
 on:
   workflow_dispatch:
@@ -11,12 +11,24 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Extract Android project
-        run: unzip -o Schowek-Android-Project.zip
+        run: unzip -o Schowek-Android-Project.zip -d extracted
+
+      - name: Find Android project
+        id: project
+        run: |
+          ROOT=$(find extracted -name settings.gradle -print -quit | xargs dirname)
+          if [ -z "$ROOT" ] || [ ! -f "$ROOT/app/build.gradle" ]; then
+            echo "Nie znaleziono projektu Android!"
+            find extracted -maxdepth 5 -type f
+            exit 1
+          fi
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -24,17 +36,22 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Restore debug signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          cp "${{ steps.project.outputs.root }}/.ci/debug.keystore" "$HOME/.android/debug.keystore"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Build debug APK
-        run: gradle assembleDebug
+      - name: Build APK
+        run: gradle -p "${{ steps.project.outputs.root }}" assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MyClipboard-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Schowek-debug-apk
+          path: ${{ steps.project.outputs.root }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
